@@ -128,17 +128,17 @@ const checkPortAvailable = (port: number): Promise<boolean> => {
 
 const startAgents = async () => {
   const directClient = new DirectClient();
-  let serverPort = parseInt(settings.SERVER_PORT || "3000");
-  const args = parseArguments();
+  // Start server immediately with Render's PORT
+  const serverPort = parseInt(process.env.PORT || process.env.SERVER_PORT || "3000");
+  
+  // Start the server first
+  directClient.start(serverPort);
+  elizaLogger.log(`Server started on port ${serverPort}`);
 
+  const args = parseArguments();
   let charactersArg = args.characters || args.character;
   let characters = [character];
 
-  console.log("charactersArg", charactersArg);
-  if (charactersArg) {
-    characters = await loadCharacters(charactersArg);
-  }
-  console.log("characters", characters);
   try {
     for (const character of characters) {
       await startAgent(character, directClient as DirectClient);
@@ -147,22 +147,9 @@ const startAgents = async () => {
     elizaLogger.error("Error starting agents:", error);
   }
 
-  while (!(await checkPortAvailable(serverPort))) {
-    elizaLogger.warn(`Port ${serverPort} is in use, trying ${serverPort + 1}`);
-    serverPort++;
-  }
-
-  // upload some agent functionality into directClient
   directClient.startAgent = async (character: Character) => {
-    // wrap it so we don't have to inject directClient later
     return startAgent(character, directClient);
   };
-
-  directClient.start(serverPort);
-
-  if (serverPort !== parseInt(settings.SERVER_PORT || "3000")) {
-    elizaLogger.log(`Server started on alternate port ${serverPort}`);
-  }
 
   const isDaemonProcess = process.env.DAEMON_PROCESS === "true";
   if(!isDaemonProcess) {
@@ -171,6 +158,15 @@ const startAgents = async () => {
     chat();
   }
 };
+
+// Add error handling for the main process
+process.on('uncaughtException', (error) => {
+  elizaLogger.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (error) => {
+  elizaLogger.error('Unhandled Rejection:', error);
+});
 
 startAgents().catch((error) => {
   elizaLogger.error("Unhandled error in startAgents:", error);
